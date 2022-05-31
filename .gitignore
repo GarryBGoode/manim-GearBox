@@ -141,4 +141,5 @@ cython_debug/
 .idea
 
 # manim output
-media/
+media/images/
+media/videos/
