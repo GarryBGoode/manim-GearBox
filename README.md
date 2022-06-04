@@ -1,11 +1,24 @@
 # manim-Gearbox
 This is a plugin for Manim that enables you to draw realistic looking gears and mechanisms.
 So far only involute gears are supported, with inside and outside gears.
+
 Planned further development:
 - Rack and pinion
 - Cycloid gears, cycloid rack
 - Sliced gears
 - Animation helpers
+
+#Installation
+`manim-gearbox` is a package on pypi, and can be directly installed using pip:
+```
+pip install manim-gearbox
+```
+# Usage
+Make sure include these two imports at the top of the .py file
+```py
+from manim import *
+from manim_gearbox import *
+```
 
 **Example**
 ```py

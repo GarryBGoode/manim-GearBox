@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "manim-GearBox"
-version = "0.1.1"
+version = "0.1.2"
 description = "This is an extension of Manim that helps drawing nice looking gears."
 authors = ["GarryBGoode <bgeri91@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = ">=3.7,<3.11"
-scipy = "1.7.3"
+scipy = "*"
 manim = ">=0.13.1"
 
 [tool.poetry.dev-dependencies]
