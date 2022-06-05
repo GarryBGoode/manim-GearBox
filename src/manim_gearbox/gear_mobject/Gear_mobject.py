@@ -1,6 +1,8 @@
 import numpy as np
 from manim import *
 from scipy.optimize import fsolve
+from scipy.optimize import fmin
+from scipy.optimize import fmin_powell
 
 __all__ = [
     "involute_func",
@@ -8,7 +10,7 @@ __all__ = [
     "Gear"
 ]
 
-def involute_func(t, r, a=0):
+def involute_func(t, r, a=0, rad_offs=0,tan_offs=0):
     '''
     Returns the x-y-z values of the involute function.
     t: input angle
@@ -16,8 +18,9 @@ def involute_func(t, r, a=0):
     a: offset angle
     '''
     def involute_val(val):
-        x = r * (np.cos(val) + (val-a) * np.sin(val-a))
-        y = r * (np.sin(val) - (val-a) * np.cos(val-a))
+        offs_v = rotate_vector(np.array([rad_offs,tan_offs,0]),val)
+        x = r * (np.cos(val) + (val-a) * np.sin(val-a)) + offs_v[0]
+        y = r * (np.sin(val) - (val-a) * np.cos(val-a)) + offs_v[1]
         z = 0
         return np.array((x,y,z))
     if hasattr(t, '__iter__'):
@@ -25,16 +28,18 @@ def involute_func(t, r, a=0):
     else:
         return involute_val(t)
 
-def involute_height_func(k, r):
+def involute_height_func(k, r, **kwargs):
     '''
     Returns the radial height of the involute compared to the base circle.
     '''
-    return np.linalg.norm(involute_func(k, r)) - r
+    return np.linalg.norm(involute_func(k, r, **kwargs)) - r
+
+
 
 
 
 class Gear(VMobject):
-    def __init__(self,  num_of_teeth, module=0.2, alpha=20, h_a=1,h_f=1.25, inner_teeth = False, **kwargs):
+    def __init__(self,  num_of_teeth, module=0.2, alpha=20, h_a=1,h_f=1.17, inner_teeth = False, **kwargs):
         '''
         Basic involue gear.
 
@@ -70,6 +75,8 @@ class Gear(VMobject):
         self.rp = module*self.z/2
         self.alpha = alpha
         self.h = (h_a+h_f)*self.m
+        self.h_a = h_a
+        self.h_f = h_f
         self.pitch = self.m * PI
         self.rb = self.rp * np.cos(self.alpha*DEGREES)
 
@@ -82,80 +89,114 @@ class Gear(VMobject):
             self.rf = self.rp - self.m * h_f
         self.inner_teeth = inner_teeth
 
+
+
         # note: points are created by the 'generate_points' function, which is called by some of the supers upon init
         super().__init__(**kwargs)
 
     def generate_points(self):
 
         # find t-range for the involute that lies inside the rf-ra range
-        tmax = fsolve(lambda u: involute_height_func(u,self.rb)-(self.ra-self.rb) , self.alpha * DEGREES)
+        undercut = False
+        res = fsolve(lambda u: involute_height_func(u,self.rb)-(self.ra-self.rb) , self.alpha * DEGREES)
+        tmax = res[0]
         if(self.rf>self.rb):
-            tmin = fsolve(lambda u: involute_height_func(u,self.rb)-(self.rf-self.rb) , self.alpha * DEGREES)
+            res = fsolve(lambda u: involute_height_func(u,self.rb)-(self.rf-self.rb) , self.alpha * DEGREES)
+            tmin = res[0]
         else:
-            tmin=[0]
-        trange_step = (tmax[0]-tmin[0])/10
+            tmin=0
 
-        # one side of the tooth
-        involute_curve = ParametricFunction(lambda u: involute_func(u,self.rb), t_range=[tmin[0],tmax[0],trange_step])
         # involute starts at 0 angle at rb, but it should be at 0 on rp, so need an offset angle
-        angle_ofs = fsolve(lambda u: involute_height_func(u,self.rb)-(self.rp-self.rb) , self.alpha * DEGREES)-self.alpha*DEGREES
-        # mirror the first curve
-        involute_curve_2 = involute_curve.copy().flip(RIGHT,about_point=ORIGIN)
-        # rotate it into position
-        involute_curve_2.rotate(self.pitch/self.rp/2+angle_ofs[0],about_point=ORIGIN)
-        # apply offset to the original curve
-        involute_curve.rotate(-angle_ofs[0], about_point=ORIGIN)
+        angle_base = fsolve(lambda u: involute_height_func(u, self.rb) - (self.rp - self.rb), self.alpha * DEGREES)
+        angle_ofs =  angle_base[0]
 
-        #pitch angle from pitch length
-        fi = self.pitch / self.rp
-        if self.inner_teeth:
-            # creating a tangent arc to connect 2 teeth
-            tanv1 = involute_curve.points[-2, :] - involute_curve.points[-1, :]
-            tanv1 = tanv1 / np.linalg.norm(tanv1)
-            tanv2 = involute_curve_2.points[-2, :] - involute_curve_2.points[-1, :]
-            tanv2 = tanv2 / np.linalg.norm(tanv2)
-            angle_arc = np.arctan2(np.linalg.norm(np.cross(tanv1, tanv2)), np.dot(tanv1, tanv2))
-            arc_top = ArcBetweenPoints(involute_curve.points[-1, :], involute_curve_2.points[-1, :], angle=PI-angle_arc)
+        ucut_amount = (self.rf / np.cos(self.alpha * DEGREES) - self.rb)
+        v_loc = (self.rb + ucut_amount) * RIGHT
+        v_loc_2 = rotate_vector(v_loc, -self.alpha * DEGREES)
+        ofs_vector = -self.rp * RIGHT + v_loc_2
+        rad_ucut = ofs_vector[0]
+        tan_ucut = ofs_vector[1]
 
-            # other arc
-            arc_bot = ArcBetweenPoints(involute_curve_2.points[0, :],
-                                       involute_curve.copy().rotate(fi, about_point=ORIGIN).points[0, :],
-                                       radius=self.rf)
-            #smoothing sharp corner at the bottom of the tooth
-            ref_point_1 = (involute_curve_2.points[1,:]+arc_bot.points[1,:])/2
-            ref_point_2 = (involute_curve.copy().rotate(fi, about_point=ORIGIN).points[1,:]+arc_bot.points[-2,:])/2
-            arc_bot.points[0,:] = ref_point_1
-            arc_bot.points[-1,:] = ref_point_2
-            involute_curve_2.points[0, :] = ref_point_1
-            involute_curve.points[0,:] = arc_bot.copy().rotate(-fi, about_point=ORIGIN).points[-1,:]
+        def undercut_func(t):
+            return involute_func(t, self.rp, rad_offs=rad_ucut, tan_offs=tan_ucut)
 
-            # putting the points together
-            tooth_curve_points = np.concatenate(
-                [involute_curve.points, arc_top.points, involute_curve_2.reverse_points().points, arc_bot.points], 0)
-        else:
-            tanv1 = involute_curve.points[1, :] - involute_curve.points[0, :]
-            tanv1 = tanv1 / np.linalg.norm(tanv1)
-            tanv2 = involute_curve_2.points[1, :] - involute_curve_2.points[0, :]
-            tanv2 = tanv2 / np.linalg.norm(tanv2)
-            angle_arc = np.arctan2(np.linalg.norm(np.cross(tanv1, tanv2)), np.dot(tanv1, tanv2))
-            arc_top = ArcBetweenPoints(involute_curve.points[-1, :],
-                                       involute_curve_2.points[-1, :],
-                                       radius=self.ra)
-            arc_bot = ArcBetweenPoints(involute_curve_2.points[0, :],
-                                       involute_curve.copy().rotate(fi, about_point=ORIGIN).points[0, :],
-                                       angle=-PI+angle_arc)
-            # smoothing sharp corner at the bottom of the tooth
-            ref_point_1 = (involute_curve.points[-2, :] + arc_top.points[1, :]) / 2
-            ref_point_2 = (involute_curve_2.points[-2, :] + arc_top.points[-2,:]) / 2
-            arc_top.points[0, :] = ref_point_1
-            arc_top.points[-1, :] = ref_point_2
-            involute_curve.points[-1, :] = ref_point_1
-            involute_curve_2.points[-1, :] = ref_point_2
-            tooth_curve_points = np.concatenate(
-                [involute_curve.points, arc_top.points, involute_curve_2.reverse_points().points, arc_bot.points], 0)
+        if self.z < 2 / (np.sin(self.alpha * DEGREES) ** 2):
+            undercut = True
+            def diff_cost_func(t):
+                invo_val = rotate_vector(involute_func(-t[1], self.rb),- self.alpha*DEGREES)
+                ucut_val = undercut_func(t[0])
+                diff = ucut_val - invo_val
+                return np.linalg.norm(diff)
+                # return diff
+            tres_ucut = fmin_powell(diff_cost_func, np.array([0, 0.1]))
+            tmin = tres_ucut[1]
+            tmax_ucut = tres_ucut[0]
 
-        for i in range(self.z):
+
+            [tmin_ucut] = fsolve(lambda t: np.linalg.norm(undercut_func(t))-self.rf,0)
+            t_step_ucut = (tmax_ucut-tmin_ucut) / 5
+            undercut_curve = ParametricFunction(undercut_func,t_range=[tmin_ucut,tmax_ucut,t_step_ucut])
+        elif self.rf < self.rb :
+            [tmin_ucut] = fsolve(lambda t: np.linalg.norm(undercut_func(t)) - self.rf, 0)
+            [tmax_ucut] = fsolve(lambda t: np.linalg.norm(undercut_func(t)) - self.rb, 0)
+            t_step_ucut = (tmax_ucut-tmin_ucut) / 5
+            undercut_curve = ParametricFunction(undercut_func, t_range=[tmin_ucut, tmax_ucut, t_step_ucut])
+            undercut = True
+
+        trange_step = (tmax - tmin) / 5
+        involute_curve = ParametricFunction(lambda u: rotate_vector(involute_func(u, self.rb),- self.alpha*DEGREES), t_range=[-tmax,-tmin,trange_step])
+
+        if undercut:
+            undercut_curve.reverse_direction()
+            mid_point = (undercut_curve.points[1,:] + involute_curve.points[-2,:])/2
+            undercut_curve.points[0, :] = mid_point
+            involute_curve.points[-1, :] = mid_point
+            involute_curve.append_points(undercut_curve.points)
+
+        # rotate back to construction position
+        involute_curve.rotate(angle=-self.pitch/self.rp/4 + angle_ofs,
+                              about_point=ORIGIN)
+
+        involute_curve2 = involute_curve.copy().flip(axis=RIGHT, about_point=ORIGIN)
+
+        arc_bot = ArcBetweenPoints(radius=self.rf,
+                                   start=involute_curve.points[-1],
+                                   end=involute_curve2.points[-1])
+        arc_top = ArcBetweenPoints(radius=self.rf,
+                                   start=rotate_vector(involute_curve2.points[0],-self.pitch/self.rp),
+                                   end=involute_curve.points[0])
+
+        involute_curve2.reverse_direction()
+
+        # pre-smoothing joining parts
+        mid_point = (involute_curve.points[1, :] + arc_top.points[-2, :]) / 2
+        involute_curve.points[0, :] = mid_point
+        arc_top.points[-1, :] = mid_point
+
+        mid_point = (arc_bot.points[1, :] + involute_curve.points[-2, :]) / 2
+        arc_bot.points[0, :] = mid_point
+        involute_curve.points[-1, :] = mid_point
+
+        mid_point = (involute_curve2.points[1, :] + arc_bot.points[-2, :]) / 2
+        involute_curve2.points[0, :] = mid_point
+        arc_bot.points[-1, :] = mid_point
+
+        mid_point = (rotate_vector(arc_top.points[1, :], self.pitch / self.rp)+ involute_curve2.points[-2, :]) / 2
+        arc_top.points[0, :] = rotate_vector(mid_point,-self.pitch / self.rp)
+        involute_curve2.points[-1, :] = mid_point
+
+        tooth_curve_points = np.concatenate((
+            arc_top.points,
+            involute_curve.points,
+            arc_bot.points,
+            involute_curve2.points
+        ))
+        self.points = involute_curve.points
+
+        self.points=tooth_curve_points
+        for i in range(self.z-1):
+            self.rotate(-self.pitch / self.rp, about_point=ORIGIN)
             self.points = np.concatenate((self.points,tooth_curve_points),0)
-            self.rotate(-self.pitch/self.rp,about_point=ORIGIN)
-        #
+
         self.make_smooth()
+        self.rotate(-self.pitch/self.rp/4)
