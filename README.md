@@ -22,20 +22,19 @@ from manim_gearbox import *
 
 **Example**
 ```py
-	class gear_test(Scene):
+	class gear_example(Scene):
 		def construct(self):
-			# 20 tooth gear
-			gear1=Gear(20, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
-			# 40 tooth gear
-			gear2=Gear(40, stroke_opacity=0, fill_color=RED, fill_opacity=1)
-
-			# shifting gears away from center
-			gear2.shift(gear2.rp * RIGHT)
-			gear1.shift(-gear1.rp * RIGHT)
-
-			self.add(gear1,gear2)
-			self.play(Rotate(gear1, PI / 10, rate_func=linear), 
-					  Rotate(gear2, - PI / 10 / 2, rate_func=linear), 
+			# small gear
+			gear1=Gear(15, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
+			# larger gear
+			gear2=Gear(25,  stroke_opacity=0, fill_color=RED, fill_opacity=1)
+			# shifting gear away from center
+			gear1.shift(-gear1.rp * 1.5 * RIGHT)
+			gear2.mesh_to(gear1)
+	
+			self.add(gear1, gear2)
+			self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear,about_point=gear1.get_center()),
+					  Rotate(gear2, - gear2.pitch_angle, rate_func=linear,about_point=gear2.get_center()),
 					  run_time=4)
 		
 ```

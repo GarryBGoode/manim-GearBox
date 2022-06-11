@@ -3,22 +3,38 @@ from manim_gearbox import *
 
 class gear_example(Scene):
     def construct(self):
-        # 10 tooth gear
-        gear1=Gear(14, module=0.5,stroke_opacity=0, fill_color=WHITE,fill_opacity=1,h_a=1, h_f=1)
-        # 40 tooth gear
-        gear2=Gear(40, module=0.5, stroke_opacity=0, fill_color=RED, fill_opacity=1,h_a=1, h_f=1)
-        # shifting gears away from center
-        gear2.shift(gear2.rp * RIGHT)
+        # small gear
+        gear1=Gear(15, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
+        # larger gear
+        gear2=Gear(25,  stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        # shifting gear away from center
+        gear1.shift(-gear1.rp * 1.5 * RIGHT)
+        gear2.mesh_to(gear1)
+
+        self.add(gear1, gear2)
+        self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear,about_point=gear1.get_center()),
+                  Rotate(gear2, - gear2.pitch_angle, rate_func=linear,about_point=gear2.get_center()),
+                  run_time=4)
+
+class gear_example_inner(Scene):
+    def construct(self):
+        # smaller gear
+        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE, fill_opacity=0.5)
+        # larger gear with inner teeth
+        gear2 = Gear(35, module=1, stroke_opacity=0, fill_color=RED, fill_opacity=0.5,inner_teeth=True)
         gear1.shift(-gear1.rp * RIGHT)
+        gear2.mesh_to(gear1)
 
         self.add(gear1)
         self.add(gear2)
-        self.play(Rotate(gear1, 2*PI / gear1.z, rate_func=linear),
-                  Rotate(gear2, - 2* PI / gear2.z, rate_func=linear), run_time=4)
+        # self.add(Line(start=gear1.get_center(), end=gear2.get_center()))
+        self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
+                  Rotate(gear2, gear2.pitch_angle, rate_func=linear),
+                  run_time=10)
 
 class test_Gear(MovingCameraScene):
     def construct(self):
-        gear1 = Gear(22, module=0.4, stroke_opacity=1, stroke_width=0.5, fill_color=WHITE, fill_opacity=0.3, h_a=1,h_f=1.2)
+        gear1 = Gear(21, module=0.4, stroke_opacity=1, stroke_width=0.5, fill_color=WHITE, fill_opacity=0.3, h_a=1,h_f=1.2)
         circ1 = Circle(radius=gear1.rf, stroke_opacity=0.3,stroke_width=1)
         circ2 = Circle(radius=gear1.ra, stroke_opacity=0.3,stroke_width=1)
         circ3 = Circle(radius=gear1.rp, stroke_opacity=0.3, stroke_color=GREEN, stroke_width=1)
@@ -66,8 +82,8 @@ class test_gear_param(Scene):
                     gear_grp.add(gear)
 
         self.add(gear_grp)
-#
-#
+
+# this part is used for debugging
 # with tempconfig({"quality": "medium_quality", "disable_caching": True}):
-#     scene = test_gear_param()
+#     scene = gear_example_inner()
 #     scene.render()
