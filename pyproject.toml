@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "manim-GearBox"
-version = "0.1.2"
+version = "0.2.0"
 description = "This is an extension of Manim that helps drawing nice looking gears."
 authors = ["GarryBGoode <bgeri91@gmail.com>"]
 

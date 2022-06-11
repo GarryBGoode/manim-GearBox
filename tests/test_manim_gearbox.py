@@ -7,13 +7,14 @@ class gear_example(Scene):
         gear1=Gear(15, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear
         gear2=Gear(25,  stroke_opacity=0, fill_color=RED, fill_opacity=1)
-        # shifting gear away from center
+        # shifting gear1 away from center
         gear1.shift(-gear1.rp * 1.5 * RIGHT)
+        # position gear2 next to gear1 so that they mesh together
         gear2.mesh_to(gear1)
 
         self.add(gear1, gear2)
-        self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear,about_point=gear1.get_center()),
-                  Rotate(gear2, - gear2.pitch_angle, rate_func=linear,about_point=gear2.get_center()),
+        self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
+                  Rotate(gear2, - gear2.pitch_angle, rate_func=linear),
                   run_time=4)
 
 class gear_example_inner(Scene):

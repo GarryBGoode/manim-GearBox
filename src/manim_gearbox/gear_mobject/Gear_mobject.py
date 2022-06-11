@@ -62,42 +62,55 @@ class Gear(VMobject):
                 gear1=Gear(15, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
                 # larger gear
                 gear2=Gear(25,  stroke_opacity=0, fill_color=RED, fill_opacity=1)
-                # shifting gear away from center
+                # shifting gear1 away from center
                 gear1.shift(-gear1.rp * 1.5 * RIGHT)
+                # position gear2 next to gear1 so that they mesh together
                 gear2.mesh_to(gear1)
 
                 self.add(gear1, gear2)
-                self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear,about_point=gear1.get_center()),
-                          Rotate(gear2, - gear2.pitch_angle, rate_func=linear,about_point=gear2.get_center()),
+                self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
+                          Rotate(gear2, - gear2.pitch_angle, rate_func=linear),
                           run_time=4)
         '''
         self.z = num_of_teeth
         self.m = module
+
+        # rp = pitch circle
+        # when 2 gears mesh, their pitch circles need to be tangent
         self.rp = module*self.z/2
+        # pressure angle
         self.alpha = alpha
+        # tooth height
         self.h = (h_a+h_f)*self.m
+        # addendum and dedendum coefficients
         self.h_a = h_a
         self.h_f = h_f
+        # arc length of a tooth-period
         self.pitch = self.m * PI
+        # base circle of involute function
         self.rb = self.rp * np.cos(self.alpha*DEGREES)
 
         # for inner teeth, the top / bottom extensions are reversed
         if inner_teeth:
+            # ra : outer radius (top of teeth)
             self.ra = self.rp + self.m * h_f
+            # rf: inner radius (bottom of teeth)
             self.rf = self.rp - self.m * h_a
         else:
             self.ra = self.rp + self.m * h_a
             self.rf = self.rp - self.m * h_f
         self.inner_teeth = inner_teeth
 
+        # angle_ofs: to be used with the construction of involutes
         self.angle_ofs = 0
+        # angular period of teeth
         self.pitch_angle = self.pitch / self.rp
-
-
-
 
         # note: points are created by the 'generate_points' function, which is called by some of the supers upon init
         super().__init__(**kwargs)
+
+        # these submobjects are a bit of a hack
+        # they are used to track the center and angular position of the gear
         self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
         self.submobjects[0].points=ORIGIN
         self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
@@ -228,7 +241,9 @@ class Gear(VMobject):
             self.append_points(Outer_ring.points)
 
 
-    def mesh_to(self, gear2):
+    def mesh_to(self, gear2: 'Gear'):
+        ''' This will position and rotate the gear (self) next to the input gear2 so that they mesh properly.
+        Note: this is only for initial positioning, it does not animate.'''
         diff_vect = self.get_center()-gear2.get_center()
         distance = np.linalg.norm(diff_vect)
         if distance != 0:
@@ -253,6 +268,7 @@ class Gear(VMobject):
             about_point: Optional[Sequence[float]] = None,
             **kwargs,
             ):
+        '''Override of original rotate function so that if about_point is not specified, use the gear center'''
         if about_point is None:
             ret = super().rotate(angle, axis, about_point=self.get_center(), **kwargs)
 
