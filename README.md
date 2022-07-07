@@ -20,7 +20,7 @@ from manim import *
 from manim_gearbox import *
 ```
 
-#Examples
+# Examples
 
 **2 basic gears**
 ```py
