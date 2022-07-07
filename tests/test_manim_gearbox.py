@@ -20,10 +20,10 @@ class gear_example(Scene):
 class gear_example_inner(Scene):
     def construct(self):
         # smaller gear
-        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE, fill_opacity=0.5)
+        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear with inner teeth
-        gear2 = Gear(36, module=1, stroke_opacity=0, fill_color=RED, fill_opacity=0.5,inner_teeth=True)
-        gear1.shift(-gear1.rp * RIGHT)
+        gear2 = Gear(36, module=1, inner_teeth=True, stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        gear1.shift(gear1.rp * UP)
         gear2.mesh_to(gear1)
 
         self.add(gear1)
