@@ -21,6 +21,7 @@ from manim_gearbox import *
 ```
 
 #Examples
+
 **2 basic gears**
 ```py
 class gear_example(Scene):
