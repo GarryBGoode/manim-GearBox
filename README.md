@@ -20,7 +20,8 @@ from manim import *
 from manim_gearbox import *
 ```
 
-**Example**
+#Examples
+** 2 basic gears **
 ```py
 class gear_example(Scene):
 	def construct(self):
@@ -41,6 +42,7 @@ class gear_example(Scene):
 ```
 ![involute_gear_example](/media/involute_gear_example.gif)
 
+** inner gear **
 ```py
 class gear_example_inner(Scene):
     def construct(self):
@@ -53,7 +55,6 @@ class gear_example_inner(Scene):
 
         self.add(gear1)
         self.add(gear2)
-        # self.add(Line(start=gear1.get_center(), end=gear2.get_center()))
         self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
                   Rotate(gear2, gear2.pitch_angle, rate_func=linear),
                   run_time=10)
