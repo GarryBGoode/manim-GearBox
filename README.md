@@ -21,7 +21,7 @@ from manim_gearbox import *
 ```
 
 #Examples
-** 2 basic gears **
+**2 basic gears**
 ```py
 class gear_example(Scene):
 	def construct(self):
@@ -42,7 +42,7 @@ class gear_example(Scene):
 ```
 ![involute_gear_example](/media/involute_gear_example.gif)
 
-** inner gear **
+**inner gear**
 ```py
 class gear_example_inner(Scene):
     def construct(self):
