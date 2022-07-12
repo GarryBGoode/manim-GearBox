@@ -66,6 +66,8 @@ class gear_example_inner(Scene):
         gear2 = Gear(36, module=1, inner_teeth=True, profile_shift=0.1, stroke_opacity=0, fill_color=RED, fill_opacity=1)
         gear1.shift(gear1.rp * UP)
         gear2.shift(gear2.rp * UP)
+		# mesh with 0.15*module larger distance than default
+		# positive_bias param is used to define left or right tooth flank shall engage if there is offset and play
         gear2.mesh_to(gear1,offset=0.15,positive_bias=False)
 
         self.add(gear1)
