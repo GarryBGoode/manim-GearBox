@@ -63,15 +63,16 @@ class gear_example_inner(Scene):
         # smaller gear
         gear1 = Gear(12, module=1, profile_shift=0.3, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear with inner teeth
-        gear2 = Gear(36, module=1, inner_teeth=True, stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        gear2 = Gear(36, module=1, inner_teeth=True, profile_shift=0.1, stroke_opacity=0, fill_color=RED, fill_opacity=1)
         gear1.shift(gear1.rp * UP)
-        gear2.mesh_to(gear1,offset=0.15)
+        gear2.shift(gear2.rp * UP)
+        gear2.mesh_to(gear1,offset=0.15,positive_bias=False)
 
         self.add(gear1)
         self.add(gear2)
         self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
                   Rotate(gear2, gear2.pitch_angle, rate_func=linear),
                   run_time=10)
-		
+
 ```
 ![inner_gear_example](/media/inner_gear_example.gif)
