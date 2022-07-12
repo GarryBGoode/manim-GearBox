@@ -4,13 +4,13 @@ from manim_gearbox import *
 class gear_example(Scene):
     def construct(self):
         # small gear
-        gear1=Gear(15, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
+        gear1=Gear(15, module=0.2, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear
-        gear2=Gear(27,  stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        gear2=Gear(27, module=0.2, stroke_opacity=0, fill_color=RED, fill_opacity=1)
         # shifting gear1 away from center
-        gear1.shift(-gear1.rp * 1.5 * RIGHT)
+        gear1.shift(gear1.rp * 1 *LEFT)
         # position gear2 next to gear1 so that they mesh together
-        gear2.mesh_to(gear1)
+        gear2.mesh_to(gear1,offset=0.2*gear1.m)
 
         self.add(gear1, gear2)
         self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
@@ -20,11 +20,15 @@ class gear_example(Scene):
 class gear_example_inner(Scene):
     def construct(self):
         # smaller gear
-        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
+        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE,fill_opacity=0.5, nppc=10)
         # larger gear with inner teeth
-        gear2 = Gear(36, module=1, inner_teeth=True, stroke_opacity=0, fill_color=RED, fill_opacity=1)
-        gear1.shift(gear1.rp * UP)
-        gear2.mesh_to(gear1)
+        gear2 = Gear(35, module=1,
+                     nppc=10,
+                     inner_teeth=True, stroke_opacity=0, fill_color=RED, fill_opacity=0.5)
+        gear1.shift(gear1.rp * UP*1.01)
+        gear2.shift(gear2.rp*UP*0.99)
+        gear1.rotate(0.05)
+        gear1.mesh_to(gear2,offset=0.25*0,positive_bias=False)
 
         self.add(gear1)
         self.add(gear2)
@@ -35,16 +39,55 @@ class gear_example_inner(Scene):
 
 class test_Gear(MovingCameraScene):
     def construct(self):
-        gear1 = Gear(26, module=0.3, stroke_opacity=1, stroke_width=0.5, fill_color=WHITE, fill_opacity=0.3,
-                     h_a=1.3,h_f=1.5)
+        gear1 = Gear(10, module=0.5, stroke_opacity=0.3, stroke_width=0.25, fill_color=WHITE, fill_opacity=0.3,
+                     h_a=1,h_f=1.2, cutout_teeth_num=5, profile_shift=0)
         circ1 = Circle(radius=gear1.rf, stroke_opacity=0.3,stroke_width=1)
         circ2 = Circle(radius=gear1.ra, stroke_opacity=0.3,stroke_width=1)
         circ3 = Circle(radius=gear1.rp, stroke_opacity=0.3, stroke_color=GREEN, stroke_width=1)
         circ4 = Circle(radius=gear1.rb, stroke_opacity=0.3, stroke_color=BLUE, stroke_width=1)
+        grp1 = VGroup(gear1, circ1, circ2, circ3, circ4)
         grid1 = NumberPlane()
+        grp1.shift(gear1.rp * LEFT)
+        # gear2 = gear1.copy().make_smooth()
+        # gear2.set_stroke(color=RED)
         # self.camera.frame.move_to(gear1)
         # self.camera.frame.set(width=2)
         self.add(circ1,circ2,circ3,circ4,grid1,gear1)
+
+class test_Gear_mesh(MovingCameraScene):
+    def construct(self):
+        m=1
+        x=0.3
+        gear1 = Gear(10, module=m, stroke_opacity=0, stroke_width=0.5, fill_color=WHITE, fill_opacity=0.5,
+                     h_a=1,h_f=1.2,profile_shift=x, nppc=20)
+        gear2 = Gear(30, module=m, stroke_opacity=0, stroke_width=0.5, fill_color=WHITE, fill_opacity=0.5,
+                     h_a=1, h_f=1.2, profile_shift=0.2,nppc=20,
+                     inner_teeth=False)
+        rack1 = Rack(21,module=m,h_a=1,h_f=1,
+                     fill_color=WHITE, fill_opacity=0.5,
+                     stroke_opacity=0, stroke_width=0.5,)
+        rack1.rotate_about_origin(PI)
+        circ1 = Circle(radius=gear1.rf, stroke_opacity=0.3,stroke_width=1)
+        circ2 = Circle(radius=gear1.ra, stroke_opacity=0.3,stroke_width=1)
+        circ3 = Circle(radius=gear1.rp, stroke_opacity=0.3, stroke_color=GREEN, stroke_width=1)
+        circ4 = Circle(radius=gear1.rb, stroke_opacity=0.3, stroke_color=BLUE, stroke_width=1)
+        grp1 = VGroup(gear1,circ1,circ2,circ3,circ4)
+        grid1 = NumberPlane()
+        grp1.shift(gear1.rp*LEFT*1.2)
+        gear2.shift(gear2.rp*LEFT)
+        rack1.shift(x*m*RIGHT)
+
+        gear1.rotate(gear1.pitch_angle*0.2)
+
+        ofs_tr = ValueTracker(0.0)
+        gear1.mesh_to(gear2,offset=0.3*m,positive_bias=True)
+
+
+        gear1.add_updater(lambda mob: mob.mesh_to(gear2,offset=ofs_tr.get_value()*m))
+        # self.camera.frame.move_to(gear1)
+        # self.camera.frame.set(width=2)
+        self.add(circ1,circ2,circ3,circ4,grid1,gear1,gear2)
+
 
 class test_Rack(Scene):
     def construct(self):
@@ -59,8 +102,9 @@ class test_Rack(Scene):
 
 class test_Gear_inner(MovingCameraScene):
     def construct(self):
-        gear1 = Gear(17, module=0.4, inner_teeth=True,
-                      stroke_opacity=1, stroke_width=1, fill_color=WHITE, fill_opacity=0.3, h_a=1,h_f=1)
+        gear1 = Gear(12, module=0.4, inner_teeth=True,
+                     cutout_teeth_num=5, profile_shift=0.0,
+                     stroke_opacity=1, stroke_width=1, fill_color=WHITE, fill_opacity=0.3, h_a=1,h_f=1)
         circ_gear = Circle(gear1.ra+0.2)
         gear2 = Difference(circ_gear,gear1,stroke_opacity=1, stroke_width=0.3, fill_color=WHITE, fill_opacity=0.3,)
         circ1 = Circle(radius=gear1.rf, stroke_opacity=0.3, stroke_width=1)
@@ -99,5 +143,5 @@ class test_gear_param(Scene):
 
 # this part is used for debugging
 # with tempconfig({"quality": "medium_quality", "disable_caching": True}):
-#     scene = test_Rack()
+#     scene = test_Gear()
 #     scene.render()

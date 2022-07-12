@@ -91,11 +91,18 @@ def involute_point_gen(t,r,**kwargs):
     return out_points
 
 
-
-
-
 class Gear(VMobject):
-    def __init__(self,  num_of_teeth, module=0.2, alpha=20, h_a=1,h_f=1.17, inner_teeth = False, nppc=5, **kwargs):
+    def __init__(self,
+                 num_of_teeth,
+                 module=0.2,
+                 alpha=20,
+                 h_a=1,
+                 h_f=1.17,
+                 inner_teeth=False,
+                 profile_shift=0,
+                 cutout_teeth_num=0,
+                 nppc=5,
+                 **kwargs):
         '''
         Basic involute gear. 2 gears need to have the same module and alpha parameters to mesh properly.
         h_a and h_f may be slightly different but should be close.
@@ -108,7 +115,9 @@ class Gear(VMobject):
         h_a: addendum / module coefficient (tooth height above pitch circle)
         h_f: dedendum / module coefficient (tooth height below pitch circle)
         inner_teeth: generate gear where the teeth point inward (for example for planetary gear setup)
-        npppc: number of points per curve. 1 tooth can have 4-6 curves depending on undercut.
+        profile_shift: profile shift coefficient x. Changes shape and diameter slightly, reduces undercut.
+        cutout_teeth_num: number of teeth not realized
+        nppc: number of points per curve. 1 tooth is constructed from 4~6 curve pieces depending on undercut.
 
         Examples
         --------
@@ -129,6 +138,7 @@ class Gear(VMobject):
                           run_time=4)
         '''
         self.z = num_of_teeth
+        self.z_cut = cutout_teeth_num
         self.m = module
 
         # rp = pitch circle
@@ -145,16 +155,17 @@ class Gear(VMobject):
         self.pitch = self.m * PI
         # base circle of involute function
         self.rb = self.rp * np.cos(self.alpha*DEGREES)
+        self.X = profile_shift * module
 
         # for inner teeth, the top / bottom extensions are reversed
         if inner_teeth:
             # ra : outer radius (top of teeth)
-            self.ra = self.rp + self.m * h_f
+            self.ra = self.rp + self.m * (h_f + profile_shift)
             # rf: inner radius (bottom of teeth)
-            self.rf = self.rp - self.m * h_a
+            self.rf = self.rp - self.m * (h_a - profile_shift)
         else:
-            self.ra = self.rp + self.m * h_a
-            self.rf = self.rp - self.m * h_f
+            self.ra = self.rp + self.m * (h_a + profile_shift)
+            self.rf = self.rp - self.m * (h_f - profile_shift)
         self.inner_teeth = inner_teeth
 
         # angle_ofs: to be used with the construction of involutes
@@ -174,7 +185,6 @@ class Gear(VMobject):
         self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
         self.submobjects[1].points = RIGHT
 
-
     def get_center(self):
         return self.submobjects[0].points.copy()
 
@@ -182,8 +192,8 @@ class Gear(VMobject):
         return self.submobjects[1].points-self.submobjects[0].points
 
     def get_angle(self):
-        v=self.get_angle_vector()
-        return np.arctan2(v[1],v[0])
+        v = self.get_angle_vector()
+        return np.arctan2(v[1], v[0])
 
     def generate_points(self):
 
@@ -191,6 +201,16 @@ class Gear(VMobject):
         angle_base = fsolve(lambda u: involute_height_func(u, self.rb) - (self.rp - self.rb), self.alpha * DEGREES,
                             xtol=1e-10)
         self.angle_ofs = angle_base[0] - self.alpha * DEGREES
+
+        # from tec-science article
+        # https://www.tec-science.com/mechanical-power-transmission/involute-gear/profile-shift/
+        # thicknes of the tooth on the pitch circle
+        s0 = self.pitch / 2 + 2 * self.X * np.tan(self.alpha * DEGREES)
+        ds = s0-self.pitch/2
+        da = ds/2 / self.rp
+
+        self.angle_ofs = angle_base[0] - self.alpha * DEGREES + da
+
         # find t-range for the involute that lies inside the rf-ra range
 
         def invo_cross_diff(t):
@@ -271,82 +291,149 @@ class Gear(VMobject):
             involute_curve.points[-1, :] = mid_point
             involute_curve.append_points(undercut_curve.points)
 
-        # rotate back to construction position
-        involute_curve.rotate(angle=-self.pitch_angle/4 + self.angle_ofs + self.alpha*DEGREES,
+        # rotate to construction position
+        involute_curve.rotate(angle=self.pitch_angle/4 + self.angle_ofs + self.alpha*DEGREES,
                               about_point=ORIGIN)
 
         involute_curve2 = involute_curve.copy().flip(axis=RIGHT, about_point=ORIGIN)
 
-        arc_bot = ArcBetweenPoints(radius=self.rf,
-                                   start=involute_curve.points[-1],
-                                   end=involute_curve2.points[-1], num_components=self.nppc)
+        angle_bot_point = involute_curve.points[-1]
+        angle_bot = np.arctan2(angle_bot_point[1],angle_bot_point[0])
+        arc_bot_1 = Arc(radius=self.rf,
+                        start_angle=angle_bot,
+                        angle= self.pitch_angle/2-angle_bot, num_components=self.nppc//2+1)
+        arc_bot_2 = arc_bot_1.copy().flip(axis=RIGHT, about_point=ORIGIN)
+        arc_bot_1.reverse_points()
         arc_top = ArcBetweenPoints(radius=self.rf,
-                                   start=rotate_vector(involute_curve2.points[0],-self.pitch_angle),
+                                   start=involute_curve2.points[0],
                                    end=involute_curve.points[0], num_components=self.nppc)
+        arc_top.reverse_points()
 
-        involute_curve2.reverse_direction()
+        involute_curve.reverse_direction()
+        def smooth_curve_joint(curve1: VMobject, curve2: VMobject):
+            mid_point = (curve2.points[1, :] + curve1.points[-2, :]) / 2
+            curve2.points[0, :] = mid_point
+            curve1.points[-1, :] = mid_point
 
-        # pre-smoothing joining parts
-        mid_point = (involute_curve.points[1, :] + arc_top.points[-2, :]) / 2
-        involute_curve.points[0, :] = mid_point
-        arc_top.points[-1, :] = mid_point
-
-        mid_point = (arc_bot.points[1, :] + involute_curve.points[-2, :]) / 2
-        arc_bot.points[0, :] = mid_point
-        involute_curve.points[-1, :] = mid_point
-
-        mid_point = (involute_curve2.points[1, :] + arc_bot.points[-2, :]) / 2
-        involute_curve2.points[0, :] = mid_point
-        arc_bot.points[-1, :] = mid_point
-
-        mid_point = (rotate_vector(arc_top.points[1, :], self.pitch_angle)+ involute_curve2.points[-2, :]) / 2
-        arc_top.points[0, :] = rotate_vector(mid_point,-self.pitch_angle)
-        involute_curve2.points[-1, :] = mid_point
+        smooth_curve_joint(arc_bot_1,involute_curve)
+        smooth_curve_joint(involute_curve, arc_top)
+        smooth_curve_joint(arc_top,involute_curve2)
+        smooth_curve_joint(involute_curve2,arc_bot_2)
 
         tooth_curve_points = np.concatenate((
-            arc_top.points,
+            arc_bot_1.points,
             involute_curve.points,
-            arc_bot.points,
-            involute_curve2.points
+            arc_top.points,
+            involute_curve2.points,
+            arc_bot_2.points
         ))
-        self.points = involute_curve.points
 
-        self.points=tooth_curve_points
-        for i in range(self.z-1):
-            self.rotate(-self.pitch / self.rp, about_point=ORIGIN)
+        self.points = np.empty((0,3))
+        # self.points=tooth_curve_points
+        for k in range(self.z-self.z_cut):
             self.points = np.concatenate((self.points,tooth_curve_points),0)
+            self.rotate(self.pitch / self.rp, about_point=ORIGIN)
 
-        self.make_smooth()
-        self.rotate(-self.pitch_angle/2,about_point=ORIGIN)
+        if self.z_cut!=0:
+            self.rotate(-self.pitch_angle*(self.z-self.z_cut+1)/2,about_point=ORIGIN)
+            arc_patch = Arc(start_angle=np.arctan2(self.points[-1,1],self.points[-1,0]),
+                            angle=-self.z_cut*self.pitch_angle,
+                            radius=self.rf,
+                            arc_center=ORIGIN)
 
+            self.append_points(arc_patch.points)
 
         if self.inner_teeth:
             Outer_ring = Circle(radius=self.ra*1.1)
-            self.reverse_direction()
+            # self.reverse_direction()
             self.append_points(Outer_ring.points)
 
-
-    def mesh_to(self, gear2: 'Gear'):
+    def mesh_to(self, gear2: 'Gear', offset: float = 0, positive_bias: bool = True):
         ''' This will position and rotate the gear (self) next to the input gear2 so that they mesh properly.
-        Note: this is only for initial positioning, it does not animate.'''
-        diff_vect = self.get_center()-gear2.get_center()
+
+        Parameters
+        ----------
+        gear2: the other gear this gear (self) will mesh to. gear2 will not move due to meshing, only the 'self'.
+        offset: axial distance offset coefficient. The gears will be offset*module further apart than default.
+        positive_bias: When offset is used, there will play between gears. If positive_bias= True,
+            this function meshes 'self' gear to gear2 as if there was a positive rotation torque on 'self'.'''
+
+        # get the basic distance vector
+        # remember: diff vect points towards self
+        diff_vect = self.get_center() - gear2.get_center()
         distance = np.linalg.norm(diff_vect)
         if distance != 0:
+            # making it unit vector
             diff_vect = diff_vect / distance
         else:
             diff_vect = RIGHT
 
-        if self.inner_teeth or gear2.inner_teeth:
-            self.shift(diff_vect * (-distance - self.rp + gear2.rp))
+        # calculate necessary axial distance. Inside-gears complicate things, as usual.
+        # The pitch point is not in the middle between pitch circles. The calculation is based on triangle relations.
+        if gear2.inner_teeth:
+            pitch_dist = ( gear2.rp - self.rp - offset * self.m - self.X + gear2.X)
+            rp1 = self.rb * pitch_dist / (-self.rb + gear2.rb)
+            rp2 = gear2.rb * pitch_dist / (-self.rb + gear2.rb)
+        elif self.inner_teeth:
+            pitch_dist = (-gear2.rp + self.rp - offset * self.m + self.X - gear2.X)
+            rp1 = self.rb * pitch_dist / (self.rb - gear2.rb)
+            rp2 = gear2.rb * pitch_dist / (self.rb - gear2.rb)
         else:
-            self.shift(diff_vect * (-distance + self.rp + gear2.rp))
+            pitch_dist = (self.rp+gear2.rp + offset * self.m + self.X + gear2.X)
+            rp1 = self.rb * pitch_dist / (self.rb+gear2.rb)
+            rp2 = gear2.rb * pitch_dist / (self.rb+gear2.rb)
 
-        mod_angle_1 = (angle_between_vectors(gear2.get_angle_vector(),diff_vect) % gear2.pitch_angle) \
-                      / gear2.pitch_angle
-        angle2 = angle_between_vectors(self.get_angle_vector(), -diff_vect)
-        self.rotate(-angle2 + mod_angle_1*self.pitch_angle+self.pitch_angle / 2,about_point=self.get_center())
+        self.shift(diff_vect * (-distance + pitch_dist))
+
+        if offset != 0 or gear2.X != 0 or self.X != 0:
+            # find the invo roll-angle where the curve goes as high (out) as the pitch point
+            if self.inner_teeth:
+                invo_offset_1 = fsolve(lambda t: involute_height_func(t,self.rb) - (rp1 - self.rb),
+                                       self.angle_ofs + self.alpha*DEGREES)
+            else:
+                invo_offset_1 = fsolve(lambda t: involute_height_func(t, self.rb) - (rp1 - self.rb),
+                                       self.angle_ofs + self.alpha * DEGREES)
+            if gear2.inner_teeth:
+                invo_offset_2 = fsolve(lambda t: involute_height_func(t, gear2.rb) - (rp2 - gear2.rb),
+                                       gear2.angle_ofs + gear2.alpha * DEGREES)
+            else:
+                invo_offset_2 = fsolve(lambda t: involute_height_func(t, gear2.rb) - (rp2 - gear2.rb),
+                                       gear2.angle_ofs + gear2.alpha*DEGREES)
+            invo_point_1 = involute_func(invo_offset_1[0], self.rb)
+            invo_point_2 = involute_func(invo_offset_2[0], gear2.rb)
+            angle_offset_1 = (np.arctan2(invo_point_1[1], invo_point_1[0]) - self.angle_ofs)
+            angle_offset_2 = (np.arctan2(invo_point_2[1], invo_point_2[0]) - gear2.angle_ofs)
+            if not positive_bias:
+                angle_offset_2 = -angle_offset_2
+                angle_offset_1 = -angle_offset_1
+        else:
+            angle_offset_1 = 0
+            angle_offset_2 = 0
+
+        # angle of the diff vector
+        diff_angle = np.arctan2(diff_vect[1], diff_vect[0])
+
+        # get the 'tooth-phases'
+        # these mods represent how much a gear has turned within the repeating pattern of the teeth
+        # diff_angle needs to be considered for turning due to movement. Think planetary gear movement.
+        # In some places -PI is involved due to diff vector pointing towards or away from the pitch point
+        # (and sometimes added PI due to experimentation)
+        if self.inner_teeth:
+            mod1 = (self.get_angle() - diff_angle - PI - angle_offset_1) % self.pitch_angle / self.pitch_angle
+            mod2 = (gear2.get_angle() - diff_angle - PI - angle_offset_2) % gear2.pitch_angle / gear2.pitch_angle
+        elif gear2.inner_teeth:
+            mod1 = (self.get_angle() - diff_angle - angle_offset_1) % self.pitch_angle / self.pitch_angle
+            mod2 = (gear2.get_angle() - diff_angle - angle_offset_2) % gear2.pitch_angle / gear2.pitch_angle
+        else:
+            mod1 = (self.get_angle() - diff_angle - PI - angle_offset_1) % self.pitch_angle / self.pitch_angle
+            mod2 = (gear2.get_angle() - diff_angle - angle_offset_2) % gear2.pitch_angle / gear2.pitch_angle
+
+        # with inside gears, the tooth goes into a tooth-hole, they overlap
         if self.inner_teeth or gear2.inner_teeth:
-            self.rotate(-PI - self.pitch_angle / 2, about_point=self.get_center())
+            self.rotate((+mod2 - mod1) * self.pitch_angle)
+        # with outside gears, the tooth pattern needs to shift half-cycle, and the rotation is reversed
+        else:
+            self.rotate((-mod2 - mod1 + 0.5) * self.pitch_angle)
 
     def rotate(
             self,
@@ -358,10 +445,10 @@ class Gear(VMobject):
         '''Override of original rotate function so that if about_point is not specified, use the gear center'''
         if about_point is None:
             ret = super().rotate(angle, axis, about_point=self.get_center(), **kwargs)
-
         else:
             ret = super().rotate(angle, axis, about_point=about_point, **kwargs)
         return ret
+
 
 class Rack(VMobject):
     def __init__(self, num_of_teeth, module=0.2, alpha=20, h_a=1, h_f=1.17, **kwargs):
@@ -411,7 +498,7 @@ class Rack(VMobject):
         self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
         self.submobjects[0].points = ORIGIN
         self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
-        self.submobjects[1].points = RIGHT
+        self.submobjects[1].points = UP
 
     def generate_points(self):
 
@@ -428,12 +515,36 @@ class Rack(VMobject):
                         ]
 
         self.set_points_as_corners(tooth_points)
-        for i in range(self.z-1):
+        for k in range(self.z-1):
             self.shift(UP * self.pitch)
             self.add_points_as_corners(tooth_points)
 
         self.shift(DOWN*self.pitch*self.z/2+RIGHT*self.h_a*self.m)
-        point2 = LEFT* self.h/2 + self.points[-1,:]
+        point2 = LEFT * self.h/2 + self.points[-1, :]
         self.add_line_to(point2)
-        self.add_line_to(self.points[0,:]+LEFT*self.h/2)
-        self.add_line_to(self.points[0,:])
+        self.add_line_to(self.points[0, :]+LEFT*self.h/2)
+        self.add_line_to(self.points[0, :])
+
+    def get_center(self):
+        return self.submobjects[0].points.copy()
+
+    def get_angle_vector(self):
+        return self.submobjects[1].points - self.submobjects[0].points
+
+    def get_angle(self):
+        v = self.get_angle_vector()
+        return np.arctan2(v[1], v[0])
+
+    def rotate(
+            self,
+            angle: float,
+            axis: np.ndarray = OUT,
+            about_point: Optional[Sequence[float]] = None,
+            **kwargs,
+            ):
+        '''Override of original rotate function so that if about_point is not specified, use the gear center'''
+        if about_point is None:
+            ret = super().rotate(angle, axis, about_point=self.get_center(), **kwargs)
+        else:
+            ret = super().rotate(angle, axis, about_point=about_point, **kwargs)
+        return ret
