@@ -20,19 +20,15 @@ class gear_example(Scene):
 class gear_example_inner(Scene):
     def construct(self):
         # smaller gear
-        gear1 = Gear(15, module=1, stroke_opacity=0, fill_color=WHITE,fill_opacity=0.5, nppc=10)
+        gear1 = Gear(12, module=1, profile_shift=0.3, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear with inner teeth
-        gear2 = Gear(35, module=1,
-                     nppc=10,
-                     inner_teeth=True, stroke_opacity=0, fill_color=RED, fill_opacity=0.5)
-        gear1.shift(gear1.rp * UP*1.01)
-        gear2.shift(gear2.rp*UP*0.99)
-        gear1.rotate(0.05)
-        gear1.mesh_to(gear2,offset=0.25*0,positive_bias=False)
+        gear2 = Gear(36, module=1, inner_teeth=True, profile_shift=0.1, stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        gear1.shift(gear1.rp * UP)
+        gear2.shift(gear2.rp * UP)
+        gear2.mesh_to(gear1,offset=0.15,positive_bias=False)
 
         self.add(gear1)
         self.add(gear2)
-        # self.add(Line(start=gear1.get_center(), end=gear2.get_center()))
         self.play(Rotate(gear1, gear1.pitch_angle, rate_func=linear),
                   Rotate(gear2, gear2.pitch_angle, rate_func=linear),
                   run_time=10)
