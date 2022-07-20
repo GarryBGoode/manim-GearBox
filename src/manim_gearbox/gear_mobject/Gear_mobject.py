@@ -25,9 +25,6 @@ def involute_func(t, r, a=0, rad_offs=0,tan_offs=0):
     a: offset angle
     '''
     def involute_val(val):
-        offs_v = rotate_vector(np.array([rad_offs,tan_offs,0]),val)
-        # x = r * (np.cos(val) + (val-a) * np.sin(val-a)) + offs_v[0]
-        # y = r * (np.sin(val) - (val-a) * np.cos(val-a)) + offs_v[1]
         x = r * (np.cos(val) + (val - a) * np.sin(val - a)) + \
             rad_offs * np.cos(val) - tan_offs*np.sin(val)
         y = r * (np.sin(val) - (val - a) * np.cos(val - a)) + \
@@ -97,7 +94,7 @@ class Gear(VMobject):
                  module=0.2,
                  alpha=20,
                  h_a=1,
-                 h_f=1.17,
+                 h_f=1.2,
                  inner_teeth=False,
                  profile_shift=0,
                  cutout_teeth_num=0,
@@ -178,22 +175,32 @@ class Gear(VMobject):
         # note: points are created by the 'generate_points' function, which is called by some of the supers upon init
         super().__init__(**kwargs)
 
-        # these submobjects are a bit of a hack
-        # they are used to track the center and angular position of the gear
-        self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
-        self.submobjects[0].points=ORIGIN
-        self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
-        self.submobjects[1].points = RIGHT
-
+        # this submobject is used for tracking the center and reference angle of the gear
+        self.submobjects.append(Line(start=ORIGIN,end=RIGHT,stroke_opacity=0,fill_opacity=0))
     def get_center(self):
-        return self.submobjects[0].points.copy()
+        return self.submobjects[0].points[0,:].copy()
 
     def get_angle_vector(self):
-        return self.submobjects[1].points-self.submobjects[0].points
+        return self.submobjects[0].points[1,:]-self.submobjects[0].points[0,:]
 
     def get_angle(self):
         v = self.get_angle_vector()
         return np.arctan2(v[1], v[0])
+
+    def set_stroke(
+        self,
+        color=None,
+        **kwargs
+    ):
+        '''
+        Override set_stroke to avoid revealing the line which is used for tracking center and angle.
+        If family is specified, it will still do it.
+        '''
+        if 'family' in kwargs:
+            super().set_stroke(color,**kwargs)
+        else:
+            kwargs.pop('family')
+            super().set_stroke(color,family=False, **kwargs)
 
     def generate_points(self):
 
@@ -206,13 +213,14 @@ class Gear(VMobject):
         # https://www.tec-science.com/mechanical-power-transmission/involute-gear/profile-shift/
         # thicknes of the tooth on the pitch circle
         s0 = self.pitch / 2 + 2 * self.X * np.tan(self.alpha * DEGREES)
+        # increment due to profile shift
         ds = s0-self.pitch/2
+        # angle change from profile shift
         da = ds/2 / self.rp
 
         self.angle_ofs = angle_base[0] - self.alpha * DEGREES + da
 
         # find t-range for the involute that lies inside the rf-ra range
-
         def invo_cross_diff(t):
             # rotate involute into a position where the tooth would be symmetrically on the x axis
             p1 = rotate_vector(involute_func(t[0], self.rb),self.pitch_angle/4+self.angle_ofs)
@@ -243,22 +251,21 @@ class Gear(VMobject):
         def undercut_func(t):
             return involute_func(t, self.rp, rad_offs=rad_ucut, tan_offs=tan_ucut)
 
-        # undercut happening according to standard criteria
-        if self.z < 2 / (np.sin(self.alpha * DEGREES) ** 2):
+        # undercut happening according to standard criteria OR
+        # if the root circle is smaller than the base, I'm using the undercut curve to smooth out the transition between
+        # base and root, simply because it provides a nice tangent curve.
+        if self.z < 2 / (np.sin(self.alpha * DEGREES) ** 2) or self.rf < self.rb:
             undercut = True
 
             def diff_val_func(t):
-
-                if t[1]>0:
-                    invo_val = rotate_vector(involute_func(-t[1], self.rb), - self.alpha * DEGREES)
-                else:
-                    invo_val = rotate_vector(involute_func(t[1], self.rb), - self.alpha * DEGREES)
+                invo_val = rotate_vector(involute_func(-np.abs(t[1]), self.rb), - self.alpha * DEGREES)
                 ucut_val = undercut_func(t[0])
                 diff = ucut_val - invo_val
                 return diff[0:2]
 
             tres_ucut = fsolve(diff_val_func,np.array([0.01,0.05]))
             tmin = tres_ucut[1]
+            # turn around the possible false-root
             if tmin<0:
                 tmin = -tmin
             tmax_ucut = tres_ucut[0]
@@ -268,16 +275,6 @@ class Gear(VMobject):
             t_range_ucut = np.linspace(tmin_ucut,tmax_ucut,self.nppc)
             undercut_curve = VMobject()
             undercut_curve.points = involute_point_gen(t_range_ucut,self.rp,rad_offs=rad_ucut, tan_offs=tan_ucut)
-
-        # if the root circle is smaller than the base, I'm using the undercut curve to smooth out the transition between
-        # base and root, simply because it provides a nice tangent curve.
-        elif self.rf < self.rb :
-            [tmin_ucut] = fsolve(lambda t: np.linalg.norm(undercut_func(t)) - self.rf, 0)
-            [tmax_ucut] = fsolve(lambda t: np.linalg.norm(undercut_func(t)) - self.rb, 0)
-            t_range_ucut = np.linspace(tmin_ucut, tmax_ucut, self.nppc)
-            undercut_curve = VMobject()
-            undercut_curve.points = involute_point_gen(t_range_ucut, self.rp, rad_offs=rad_ucut, tan_offs=tan_ucut)
-            undercut = True
 
         trange_invo = np.linspace(-tmax,-tmin,self.nppc)
         involute_curve = VMobject()
@@ -329,7 +326,6 @@ class Gear(VMobject):
         ))
 
         self.points = np.empty((0,3))
-        # self.points=tooth_curve_points
         for k in range(self.z-self.z_cut):
             self.points = np.concatenate((self.points,tooth_curve_points),0)
             self.rotate(self.pitch / self.rp, about_point=ORIGIN)
@@ -345,10 +341,9 @@ class Gear(VMobject):
 
         if self.inner_teeth:
             Outer_ring = Circle(radius=self.ra*1.1)
-            # self.reverse_direction()
             self.append_points(Outer_ring.points)
 
-    def mesh_to(self, gear2: 'Gear', offset: float = 0, positive_bias: bool = True):
+    def mesh_to(self, gear2: 'Gear', offset: float = 0, bias = 1):
         ''' This will position and rotate the gear (self) next to the input gear2 so that they mesh properly.
 
         Parameters
@@ -401,11 +396,9 @@ class Gear(VMobject):
                                        gear2.angle_ofs + gear2.alpha*DEGREES)
             invo_point_1 = involute_func(invo_offset_1[0], self.rb)
             invo_point_2 = involute_func(invo_offset_2[0], gear2.rb)
-            angle_offset_1 = (np.arctan2(invo_point_1[1], invo_point_1[0]) - self.angle_ofs)
-            angle_offset_2 = (np.arctan2(invo_point_2[1], invo_point_2[0]) - gear2.angle_ofs)
-            if not positive_bias:
-                angle_offset_2 = -angle_offset_2
-                angle_offset_1 = -angle_offset_1
+            angle_offset_1 = bias * (np.arctan2(invo_point_1[1], invo_point_1[0]) - self.angle_ofs)
+            angle_offset_2 = bias * (np.arctan2(invo_point_2[1], invo_point_2[0]) - gear2.angle_ofs)
+
         else:
             angle_offset_1 = 0
             angle_offset_2 = 0
@@ -495,10 +488,7 @@ class Rack(VMobject):
 
         # these submobjects are a bit of a hack
         # they are used to track the center and angular position of the gear
-        self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
-        self.submobjects[0].points = ORIGIN
-        self.submobjects.append(VMobject(stroke_opacity=0, fill_opacity=0))
-        self.submobjects[1].points = UP
+        self.submobjects.append(Line(start=ORIGIN, end=UP, stroke_opacity=0, fill_opacity=0))
 
     def generate_points(self):
 
@@ -519,17 +509,17 @@ class Rack(VMobject):
             self.shift(UP * self.pitch)
             self.add_points_as_corners(tooth_points)
 
-        self.shift(DOWN*self.pitch*self.z/2+RIGHT*self.h_a*self.m)
+        self.shift(DOWN*self.pitch*(self.z-1)/2+RIGHT*self.h_a*self.m)
         point2 = LEFT * self.h/2 + self.points[-1, :]
         self.add_line_to(point2)
         self.add_line_to(self.points[0, :]+LEFT*self.h/2)
         self.add_line_to(self.points[0, :])
 
     def get_center(self):
-        return self.submobjects[0].points.copy()
+        return self.submobjects[0].points[0,:].copy()
 
     def get_angle_vector(self):
-        return self.submobjects[1].points - self.submobjects[0].points
+        return self.submobjects[0].points[1,:] - self.submobjects[0].points[0,:]
 
     def get_angle(self):
         v = self.get_angle_vector()
