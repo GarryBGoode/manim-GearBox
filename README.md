@@ -69,6 +69,9 @@ class gear_example_inner(Scene):
 		# mesh with 0.15*module larger distance than default
 		# bias param is used to define left or right tooth flank shall engage if there is offset and play
         gear2.mesh_to(gear1,offset=0.15,bias=-1)
+	# mesh with 0.15*module larger distance than default
+	# bias param is used to define left or right tooth flank shall engage if there is offset and play
+        gear2.mesh_to(gear1,offset=0.15,bias=False)
 
         self.add(gear1)
         self.add(gear2)
