@@ -4,13 +4,13 @@ from manim_gearbox import *
 class gear_example(Scene):
     def construct(self):
         # small gear
-        gear1=Gear(15, module=1, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
+        gear1=Gear(15, module=0.2, stroke_opacity=0, fill_color=WHITE,fill_opacity=1)
         # larger gear
-        gear2=Gear(27, module=1, stroke_opacity=0, fill_color=RED, fill_opacity=1)
+        gear2=Gear(27, module=0.2, stroke_opacity=0, fill_color=RED, fill_opacity=1)
         # shifting gear1 away from center
         gear1.shift(gear1.rp * 1 *LEFT)
         # position gear2 next to gear1 so that they mesh together
-        gear2.mesh_to(gear1,offset=0.2*gear1.m)
+        gear2.mesh_to(gear1,offset=0.2)
 
         # self.play(Create(gear1), Create(gear2))
         self.add(gear1,gear2)
